@@ -1,0 +1,29 @@
+# Core Framework
+flet>=0.21.0
+python-dotenv>=1.0.0
+
+# Database & ORM
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Security & Encryption
+cryptography>=41.0.0
+bcrypt>=4.1.0
+argon2-cffi>=23.1.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Async & Performance
+aiohttp>=3.8.0
+apscheduler>=3.10.0
+
+# Development & Build
+pyinstaller>=6.0.0
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Logging
+python-json-logger>=2.0.0
