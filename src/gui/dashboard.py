@@ -234,13 +234,13 @@ class DashboardView:
             bgcolor=COLORS["surface"],
             actions=[
                 ft.IconButton(
-                    icon=ft.icons.SETTINGS,
+                    icon=ft.Icons.SETTINGS,
                     icon_color=COLORS["on_surface_variant"],
                     tooltip="Settings",
                     on_click=lambda _: self.show_settings()
                 ),
                 ft.IconButton(
-                    icon=ft.icons.LOGOUT,
+                    icon=ft.Icons.LOGOUT,
                     icon_color=COLORS["on_surface_variant"],
                     tooltip="Logout",
                     on_click=lambda _: self.app.handle_logout()
@@ -256,28 +256,28 @@ class DashboardView:
             bgcolor=COLORS["surface"],
             destinations=[
                 ft.NavigationRailDestination(
-                    icon=ft.icons.DASHBOARD_OUTLINED,
-                    selected_icon=ft.icons.DASHBOARD,
+                    icon=ft.Icons.DASHBOARD_OUTLINED,
+                    selected_icon=ft.Icons.DASHBOARD,
                     label="Dashboard",
                 ),
                 ft.NavigationRailDestination(
-                    icon=ft.icons.SHOW_CHART_OUTLINED,
-                    selected_icon=ft.icons.SHOW_CHART,
+                    icon=ft.Icons.SHOW_CHART_OUTLINED,
+                    selected_icon=ft.Icons.SHOW_CHART,
                     label="Stocks & ETFs",
                 ),
                 ft.NavigationRailDestination(
-                    icon=ft.icons.CURRENCY_BITCOIN,
-                    selected_icon=ft.icons.CURRENCY_BITCOIN,
+                    icon=ft.Icons.CURRENCY_BITCOIN,
+                    selected_icon=ft.Icons.CURRENCY_BITCOIN,
                     label="Crypto",
                 ),
                 ft.NavigationRailDestination(
-                    icon=ft.icons.RECEIPT_LONG_OUTLINED,
-                    selected_icon=ft.icons.RECEIPT_LONG,
+                    icon=ft.Icons.RECEIPT_LONG_OUTLINED,
+                    selected_icon=ft.Icons.RECEIPT_LONG,
                     label="Transactions",
                 ),
                 ft.NavigationRailDestination(
-                    icon=ft.icons.ANALYTICS_OUTLINED,
-                    selected_icon=ft.icons.ANALYTICS,
+                    icon=ft.Icons.ANALYTICS_OUTLINED,
+                    selected_icon=ft.Icons.ANALYTICS,
                     label="Analytics",
                 ),
             ],
@@ -353,10 +353,10 @@ class DashboardView:
     def create_stats_row(self) -> ft.Row:
         """Create quick statistics row."""
         stats = [
-            {"label": "Accounts", "value": "0", "icon": ft.icons.ACCOUNT_BALANCE},
-            {"label": "Assets", "value": "0", "icon": ft.icons.PIE_CHART},
-            {"label": "24h Change", "value": "0.00%", "icon": ft.icons.TRENDING_UP},
-            {"label": "Total P&L", "value": "€0.00", "icon": ft.icons.ATTACH_MONEY},
+            {"label": "Accounts", "value": "0", "icon": ft.Icons.ACCOUNT_BALANCE},
+            {"label": "Assets", "value": "0", "icon": ft.Icons.PIE_CHART},
+            {"label": "24h Change", "value": "0.00%", "icon": ft.Icons.TRENDING_UP},
+            {"label": "Total P&L", "value": "€0.00", "icon": ft.Icons.ATTACH_MONEY},
         ]
         
         cards = []
@@ -396,7 +396,7 @@ class DashboardView:
             ft.Container(expand=True),
             ft.ElevatedButton(
                 "Create Account",
-                icon=ft.icons.ADD,
+                icon=ft.Icons.ADD,
                 bgcolor=COLORS["primary"],
                 color=COLORS["on_primary"],
                 on_click=lambda _: self.show_create_account_dialog()
@@ -432,7 +432,7 @@ class DashboardView:
             empty_state = ft.Container(
                 content=ft.Column([
                     ft.Icon(
-                        ft.icons.ACCOUNT_BALANCE_WALLET,
+                        ft.Icons.ACCOUNT_BALANCE_WALLET,
                         color=COLORS["on_surface_variant"],
                         size=64
                     ),
@@ -472,11 +472,11 @@ class DashboardView:
     def create_account_card(self, account: Dict) -> ft.Container:
         """Create an account card."""
         # Determine icon based on account type
-        icon = ft.icons.SHOW_CHART
+        icon = ft.Icons.SHOW_CHART
         if account['type'] == 'crypto':
-            icon = ft.icons.CURRENCY_BITCOIN
+            icon = ft.Icons.CURRENCY_BITCOIN
         elif account['type'] == 'mixed':
-            icon = ft.icons.ACCOUNT_BALANCE_WALLET
+            icon = ft.Icons.ACCOUNT_BALANCE_WALLET
         
         return ft.Container(
             content=ft.Row([
@@ -502,13 +502,13 @@ class DashboardView:
                 expand=True
                 ),
                 ft.IconButton(
-                    icon=ft.icons.EDIT,
+                    icon=ft.Icons.EDIT,
                     icon_color=COLORS["on_surface_variant"],
                     tooltip="Edit Account",
                     on_click=lambda _, acc=account: self.edit_account(acc)
                 ),
                 ft.IconButton(
-                    icon=ft.icons.DELETE,
+                    icon=ft.Icons.DELETE,
                     icon_color=COLORS["error"],
                     tooltip="Delete Account",
                     on_click=lambda _, acc=account: self.delete_account(acc)

@@ -6,8 +6,14 @@ Handles app settings, constants, and environment variables.
 import os
 from pathlib import Path
 from typing import Optional
-from pydantic_settings import BaseSettings
-from pydantic import Field, validator
+
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Fallback for older pydantic versions
+    from pydantic import BaseSettings
+
+from pydantic import Field, field_validator
 
 
 class AppConfig(BaseSettings):
@@ -51,29 +57,22 @@ class AppConfig(BaseSettings):
     LOG_MAX_BYTES: int = 10_485_760  # 10MB
     LOG_BACKUP_COUNT: int = 5
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8"
+    }
     
-    @validator("DB_PATH", "CACHE_DIR", "BACKUP_DIR", "LOG_DIR", pre=True, always=True)
-    def set_paths(cls, v, values):
-        """Initialize paths based on DATA_DIR."""
-        if v is None and "DATA_DIR" in values:
-            data_dir = values["DATA_DIR"]
-            if not isinstance(data_dir, Path):
-                data_dir = Path(data_dir)
-            
-            field_name = cls.__fields__[v].name if hasattr(cls, '__fields__') else ""
-            
-            if "DB_PATH" in str(v) or v is None and field_name == "DB_PATH":
-                return data_dir / "database" / values.get("DB_NAME", "portfolio.db")
-            elif "CACHE_DIR" in str(v) or v is None and field_name == "CACHE_DIR":
-                return data_dir / "cache"
-            elif "BACKUP_DIR" in str(v) or v is None and field_name == "BACKUP_DIR":
-                return data_dir / "backups"
-            elif "LOG_DIR" in str(v) or v is None and field_name == "LOG_DIR":
-                return data_dir / "logs"
-        return v
+    def model_post_init(self, __context):
+        """Initialize paths after model creation"""
+        # Set default paths based on DATA_DIR
+        if self.DB_PATH is None:
+            self.DB_PATH = self.DATA_DIR / "database" / self.DB_NAME
+        if self.CACHE_DIR is None:
+            self.CACHE_DIR = self.DATA_DIR / "cache"
+        if self.BACKUP_DIR is None:
+            self.BACKUP_DIR = self.DATA_DIR / "backups"
+        if self.LOG_DIR is None:
+            self.LOG_DIR = self.DATA_DIR / "logs"
     
     def ensure_directories(self):
         """Create all necessary directories if they don't exist."""
@@ -87,13 +86,13 @@ class AppConfig(BaseSettings):
         
         for directory in directories:
             if directory:
-                directory.mkdir(parents=True, exist_ok=True)
+                try:
+                    directory.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    print(f"Warning: Could not create directory {directory}: {e}")
     
     def get_db_url(self, encrypted: bool = True) -> str:
         """Get the database URL for SQLAlchemy."""
-        if encrypted:
-            # Will be used with sqlcipher or custom encryption
-            return f"sqlite:///{self.DB_PATH}"
         return f"sqlite:///{self.DB_PATH}"
 
 
@@ -111,7 +110,11 @@ def get_config() -> AppConfig:
 
 
 # Convenience constants
-config = get_config()
+try:
+    config = get_config()
+except Exception:
+    # Fallback config for initial import
+    config = None
 
 # UI Color scheme (Material Design 3)
 COLORS = {

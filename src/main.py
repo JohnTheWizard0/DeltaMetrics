@@ -3,6 +3,14 @@ Main entry point for the Portfolio Tracker application.
 Handles authentication and navigation between views.
 """
 
+import sys
+import os
+from pathlib import Path
+
+# Add the project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import flet as ft
 from typing import Optional
 
@@ -96,7 +104,7 @@ class AuthenticationView:
         # Security notice
         security_notice = ft.Container(
             content=ft.Row([
-                ft.Icon(ft.icons.SECURITY, color=COLORS["primary"], size=20),
+                ft.Icon(ft.Icons.SECURITY, color=COLORS["primary"], size=20),
                 ft.Text(
                     "Your data is encrypted locally. Never share your master password.",
                     size=11,
@@ -114,7 +122,7 @@ class AuthenticationView:
         content = ft.Container(
             content=ft.Column([
                 ft.Container(height=50),
-                ft.Icon(ft.icons.LOCK_OUTLINE, color=COLORS["primary"], size=64),
+                ft.Icon(ft.Icons.LOCK_OUTLINE, color=COLORS["primary"], size=64),
                 ft.Container(height=20),
                 title,
                 subtitle,
@@ -137,7 +145,7 @@ class AuthenticationView:
             shadow=ft.BoxShadow(
                 spread_radius=1,
                 blur_radius=10,
-                color=ft.colors.BLACK26,
+                color=ft.Colors.BLACK26,
             )
         )
         

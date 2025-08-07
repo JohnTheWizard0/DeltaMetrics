@@ -111,50 +111,89 @@ class DatabaseManager:
         Creates tables if they don't exist.
         """
         try:
-            if check_auth and not self.security.is_authenticated():
-                raise SecurityError("Not authenticated")
+            # Only check auth if explicitly requested and not during first setup
+            if check_auth and not self.security.is_first_run() and not self.security.is_authenticated():
+                print("Database initialization failed: Not authenticated")
+                return False
             
             # Create database directory
-            self.config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+            db_dir = self.config.DB_PATH.parent
+            try:
+                db_dir.mkdir(parents=True, exist_ok=True)
+                print(f"Database directory: {db_dir}")
+            except Exception as e:
+                print(f"Failed to create database directory: {e}")
+                return False
             
-            # Create engine with WAL mode for better concurrency
+            # Create engine with proper SQLite configuration
+            db_url = f"sqlite:///{self.config.DB_PATH}"
+            print(f"Database URL: {db_url}")
+            
             self.engine = create_engine(
-                f"sqlite:///{self.config.DB_PATH}",
+                db_url,
                 connect_args={
                     "check_same_thread": False,
                     "timeout": 30
                 },
                 poolclass=StaticPool,
-                echo=False
+                echo=False  # Set to True for SQL debugging
             )
             
-            # Enable WAL mode and other optimizations
+            # Configure SQLite settings
             @event.listens_for(self.engine, "connect")
             def set_sqlite_pragma(dbapi_conn, connection_record):
                 cursor = dbapi_conn.cursor()
-                if self.config.DB_WAL_MODE:
-                    cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA foreign_keys=ON")
-                cursor.execute("PRAGMA synchronous=NORMAL")
-                cursor.execute("PRAGMA temp_store=MEMORY")
-                cursor.execute("PRAGMA mmap_size=30000000000")
-                cursor.close()
+                try:
+                    if self.config.DB_WAL_MODE:
+                        cursor.execute("PRAGMA journal_mode=WAL")
+                    cursor.execute("PRAGMA foreign_keys=ON")
+                    cursor.execute("PRAGMA synchronous=NORMAL")
+                    cursor.execute("PRAGMA temp_store=MEMORY")
+                    cursor.execute("PRAGMA mmap_size=268435456")  # 256MB
+                    print("SQLite pragmas set successfully")
+                except Exception as e:
+                    print(f"Warning: Could not set SQLite pragmas: {e}")
+                finally:
+                    cursor.close()
+            
+            # Test database connection
+            try:
+                with self.engine.connect() as conn:
+                    result = conn.execute(text("SELECT 1"))
+                    result.fetchone()
+                print("Database connection test successful")
+            except Exception as e:
+                print(f"Database connection test failed: {e}")
+                return False
             
             # Create all tables
-            Base.metadata.create_all(self.engine)
+            try:
+                Base.metadata.create_all(self.engine)
+                print("Database tables created/verified")
+            except Exception as e:
+                print(f"Failed to create database tables: {e}")
+                return False
             
             # Create session factory
             self.Session = sessionmaker(bind=self.engine)
             
             # Initialize default settings if first run
-            if self._is_first_db_run():
-                self._initialize_defaults()
+            try:
+                if self._is_first_db_run():
+                    self._initialize_defaults()
+                    print("Default settings initialized")
+            except Exception as e:
+                print(f"Warning: Could not initialize default settings: {e}")
+                # Don't fail entirely if this fails
             
             self._initialized = True
+            print("Database initialization completed successfully")
             return True
             
         except Exception as e:
             print(f"Database initialization failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     @contextmanager
@@ -167,8 +206,9 @@ class DatabaseManager:
         try:
             yield session
             session.commit()
-        except Exception:
+        except Exception as e:
             session.rollback()
+            print(f"Database session error: {e}")
             raise
         finally:
             session.close()
@@ -178,26 +218,50 @@ class DatabaseManager:
         if data is None:
             return None
         
-        json_str = json.dumps(data) if not isinstance(data, str) else data
-        encrypted = self.security.encrypt_data(json_str)
-        return encrypted.hex()
+        # Only encrypt if authenticated (for sensitive data)
+        if not self.security.is_authenticated():
+            # For non-sensitive data, return as JSON string
+            return json.dumps(data) if not isinstance(data, str) else data
+            
+        try:
+            json_str = json.dumps(data) if not isinstance(data, str) else data
+            encrypted = self.security.encrypt_data(json_str)
+            return encrypted.hex()
+        except Exception as e:
+            print(f"Encryption failed: {e}")
+            # Fallback to unencrypted storage
+            return json.dumps(data) if not isinstance(data, str) else data
     
     def decrypt_field(self, encrypted_hex: str) -> Any:
         """Decrypt data from database."""
         if not encrypted_hex:
             return None
         
-        encrypted_bytes = bytes.fromhex(encrypted_hex)
-        decrypted = self.security.decrypt_data(encrypted_bytes)
+        # Try to decrypt first
+        if self.security.is_authenticated():
+            try:
+                encrypted_bytes = bytes.fromhex(encrypted_hex)
+                decrypted = self.security.decrypt_data(encrypted_bytes)
+                try:
+                    return json.loads(decrypted)
+                except json.JSONDecodeError:
+                    return decrypted.decode()
+            except Exception:
+                # If decryption fails, try as regular JSON
+                pass
         
+        # Fallback: try to parse as regular JSON
         try:
-            return json.loads(decrypted)
+            return json.loads(encrypted_hex)
         except json.JSONDecodeError:
-            return decrypted.decode()
+            return encrypted_hex
     
     def create_account(self, name: str, account_type: str, broker: str = None,
                       currency: str = 'EUR', initial_balance: float = 0.0) -> int:
         """Create a new account/depot."""
+        if not self._initialized:
+            raise RuntimeError("Database not initialized")
+            
         with self.get_session() as session:
             account = Account(
                 name=name,
@@ -207,48 +271,63 @@ class DatabaseManager:
                 initial_balance=initial_balance
             )
             
-            # Encrypt sensitive metadata if needed
+            # Store basic metadata (non-sensitive)
             if broker:
-                metadata = {"broker_details": broker}
+                metadata = {"broker_details": broker, "created_via": "app"}
                 account.metadata_encrypted = self.encrypt_field(metadata)
             
             session.add(account)
-            session.flush()
-            return account.id
+            session.flush()  # Get the ID
+            account_id = account.id
+            print(f"Created account: {name} (ID: {account_id})")
+            return account_id
     
     def get_accounts(self, active_only: bool = True) -> List[Dict]:
         """Get all accounts."""
-        with self.get_session() as session:
-            query = session.query(Account)
-            if active_only:
-                query = query.filter(Account.is_active == True)
+        if not self._initialized:
+            return []
             
-            accounts = []
-            for acc in query.all():
-                account_dict = {
-                    'id': acc.id,
-                    'name': acc.name,
-                    'type': acc.account_type,
-                    'broker': acc.broker,
-                    'currency': acc.currency,
-                    'initial_balance': acc.initial_balance,
-                    'created_at': acc.created_at.isoformat() if acc.created_at else None,
-                    'is_active': acc.is_active
-                }
+        try:
+            with self.get_session() as session:
+                query = session.query(Account)
+                if active_only:
+                    query = query.filter(Account.is_active == True)
                 
-                # Decrypt metadata if present
-                if acc.metadata_encrypted:
-                    try:
-                        account_dict['metadata'] = self.decrypt_field(acc.metadata_encrypted)
-                    except:
-                        pass
+                accounts = []
+                for acc in query.all():
+                    account_dict = {
+                        'id': acc.id,
+                        'name': acc.name,
+                        'type': acc.account_type,
+                        'broker': acc.broker,
+                        'currency': acc.currency,
+                        'initial_balance': acc.initial_balance,
+                        'created_at': acc.created_at.isoformat() if acc.created_at else None,
+                        'is_active': acc.is_active
+                    }
+                    
+                    # Decrypt metadata if present
+                    if acc.metadata_encrypted:
+                        try:
+                            account_dict['metadata'] = self.decrypt_field(acc.metadata_encrypted)
+                        except Exception as e:
+                            print(f"Could not decrypt metadata for account {acc.id}: {e}")
+                    
+                    accounts.append(account_dict)
                 
-                accounts.append(account_dict)
-            
-            return accounts
+                print(f"Retrieved {len(accounts)} accounts")
+                return accounts
+                
+        except Exception as e:
+            print(f"Failed to get accounts: {e}")
+            return []
     
     def save_setting(self, key: str, value: Any, encrypted: bool = False) -> bool:
         """Save a setting to the database."""
+        if not self._initialized:
+            print("Cannot save setting: database not initialized")
+            return False
+            
         try:
             with self.get_session() as session:
                 # Check if setting exists
@@ -274,11 +353,14 @@ class DatabaseManager:
                 
                 return True
         except Exception as e:
-            print(f"Failed to save setting: {e}")
+            print(f"Failed to save setting {key}: {e}")
             return False
     
     def get_setting(self, key: str, default: Any = None) -> Any:
         """Get a setting from the database."""
+        if not self._initialized:
+            return default
+            
         try:
             with self.get_session() as session:
                 setting = session.query(Settings).filter_by(key=key).first()
@@ -294,11 +376,14 @@ class DatabaseManager:
                     except json.JSONDecodeError:
                         return setting.value
         except Exception as e:
-            print(f"Failed to get setting: {e}")
+            print(f"Failed to get setting {key}: {e}")
             return default
     
     def verify_integrity(self) -> bool:
         """Verify database integrity."""
+        if not self._initialized:
+            return False
+            
         try:
             with self.get_session() as session:
                 # Run integrity check
@@ -351,9 +436,14 @@ class DatabaseManager:
             
             # Encrypt the backup if authenticated
             if self.security.is_authenticated():
-                encrypted_backup = self.security.encrypt_file(backup_path)
-                backup_path.unlink()  # Remove unencrypted backup
-                return encrypted_backup
+                try:
+                    encrypted_backup = self.security.encrypt_file(backup_path)
+                    backup_path.unlink()  # Remove unencrypted backup
+                    return encrypted_backup
+                except Exception as e:
+                    print(f"Could not encrypt backup: {e}")
+                    # Return unencrypted backup
+                    return backup_path
             
             return backup_path
             
@@ -363,9 +453,12 @@ class DatabaseManager:
     
     def _is_first_db_run(self) -> bool:
         """Check if this is the first database run."""
-        with self.get_session() as session:
-            count = session.query(Settings).count()
-            return count == 0
+        try:
+            with self.get_session() as session:
+                count = session.query(Settings).count()
+                return count == 0
+        except Exception:
+            return True
     
     def _initialize_defaults(self):
         """Initialize default settings on first run."""

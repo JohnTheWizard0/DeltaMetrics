@@ -14,7 +14,7 @@ from pathlib import Path
 import bcrypt
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from src.utils.config import get_config
 
@@ -31,7 +31,7 @@ class SecurityManager:
         
     def derive_key(self, password: str, salt: bytes) -> bytes:
         """Derive an encryption key from password using PBKDF2."""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
